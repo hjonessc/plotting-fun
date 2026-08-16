@@ -1,0 +1,48 @@
+name: Weather Plot
+
+on:
+  workflow_dispatch:
+    inputs:
+      label:
+        description: "Location name (for chart title)"
+        required: true
+        default: "San Francisco, CA"
+      lat:
+        description: "Latitude"
+        required: true
+        default: "37.7749"
+      lon:
+        description: "Longitude"
+        required: true
+        default: "-122.4194"
+
+jobs:
+  plot:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install matplotlib numpy
+
+      - name: Generate weather plot
+        run: |
+          python weather_plot.py \
+            --lat "${{ github.event.inputs.lat }}" \
+            --lon "${{ github.event.inputs.lon }}" \
+            --label "${{ github.event.inputs.label }}"
+
+      - name: Commit results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add results/
+          git diff --staged --quiet || git commit -m "chore: weather plot — ${{ github.event.inputs.label }} [skip ci]"
+          git push

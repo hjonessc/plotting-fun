@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plotting Fun</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f5f5;
+      color: #222;
+      padding: 24px 16px;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+
+    h1 { font-size: 1.4rem; margin-bottom: 4px; }
+    .subtitle { color: #666; font-size: 0.9rem; margin-bottom: 28px; }
+
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+
+    h2 { font-size: 1rem; margin-bottom: 14px; color: #333; }
+
+    label { display: block; font-size: 0.82rem; color: #555; margin-bottom: 4px; margin-top: 12px; }
+    label:first-of-type { margin-top: 0; }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input[type="text"]:focus { border-color: #1565C0; }
+
+    .autocomplete-wrapper { position: relative; }
+    #suggestions {
+      position: absolute;
+      top: 100%;
+      left: 0; right: 0;
+      background: white;
+      border: 1px solid #ddd;
+      border-top: none;
+      border-radius: 0 0 8px 8px;
+      z-index: 100;
+      max-height: 220px;
+      overflow-y: auto;
+      display: none;
+    }
+    .suggestion {
+      padding: 10px 12px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .suggestion:last-child { border-bottom: none; }
+    .suggestion:hover, .suggestion.active { background: #EEF2FF; }
+    .suggestion .main { font-weight: 500; }
+    .suggestion .sub  { font-size: 0.78rem; color: #888; margin-top: 1px; }
+
+    .coords {
+      display: flex; gap: 8px; margin-top: 8px;
+    }
+    .coords input { flex: 1; font-size: 0.85rem; color: #888; }
+
+    button {
+      width: 100%;
+      margin-top: 16px;
+      padding: 12px;
+      background: #1565C0;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    button:hover:not(:disabled) { background: #0D47A1; }
+    button:disabled { background: #aaa; cursor: default; }
+
+    .status {
+      font-size: 0.85rem;
+      margin-top: 10px;
+      min-height: 20px;
+      color: #555;
+    }
+    .status.ok    { color: #2E7D32; }
+    .status.error { color: #C62828; }
+
+    .settings {
+      margin-top: 28px;
+      padding-top: 20px;
+      border-top: 1px solid #eee;
+    }
+    .settings h3 { font-size: 0.85rem; color: #888; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .settings input { font-size: 0.85rem; }
+
+    a { color: #1565C0; }
+  </style>
+</head>
+<body>
+
+  <h1>📈 Plotting Fun</h1>
+  <p class="subtitle">Trigger GitHub Actions plots from your phone.</p>
+
+  <!-- ── Weather ── -->
+  <div class="card">
+    <h2>🌤 Weather Plot</h2>
+
+    <label>Location</label>
+    <div class="autocomplete-wrapper">
+      <input type="text" id="location-input" placeholder="Start typing an address or city…" autocomplete="off">
+      <div id="suggestions"></div>
+    </div>
+
+    <div class="coords">
+      <input type="text" id="lat-display" placeholder="Latitude"  readonly>
+      <input type="text" id="lon-display" placeholder="Longitude" readonly>
+    </div>
+
+    <button id="weather-btn" disabled>Run Weather Plot</button>
+    <div class="status" id="weather-status"></div>
+  </div>
+
+  <!-- ── Stock ── -->
+  <div class="card">
+    <h2>📊 Stock Plot</h2>
+    <label>Ticker symbol(s)</label>
+    <input type="text" id="ticker-input" placeholder="AAPL MSFT SPY" value="AAPL">
+    <button id="stock-btn">Run Stock Plot</button>
+    <div class="status" id="stock-status"></div>
+  </div>
+
+  <!-- ── Settings ── -->
+  <div class="settings">
+    <h3>Settings</h3>
+    <label>GitHub Token (<a href="https://github.com/settings/tokens/new?scopes=repo&description=plotting-fun" target="_blank">generate one</a>)</label>
+    <input type="text" id="gh-token" placeholder="ghp_…" autocomplete="off" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:0.9rem;">
+
+    <label style="margin-top:12px;">GitHub repo (owner/repo)</label>
+    <input type="text" id="gh-repo" placeholder="henryjonessc/plotting-fun" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:0.9rem;">
+
+    <button id="save-settings" style="margin-top:12px;background:#444;">Save Settings</button>
+    <div class="status" id="settings-status"></div>
+  </div>
+
+<script>
+// ── Persist settings in localStorage ─────────────────────────────────────────
+const $ = id => document.getElementById(id);
+
+function loadSettings() {
+  $("gh-token").value = localStorage.getItem("gh_token") || "";
+  $("gh-repo").value  = localStorage.getItem("gh_repo")  || "";
+}
+
+$("save-settings").addEventListener("click", () => {
+  localStorage.setItem("gh_token", $("gh-token").value.trim());
+  localStorage.setItem("gh_repo",  $("gh-repo").value.trim());
+  showStatus("settings-status", "Saved.", "ok");
+});
+
+loadSettings();
+
+
+// ── Address autocomplete via Nominatim ────────────────────────────────────────
+let selectedLat = null, selectedLon = null, selectedLabel = null;
+let debounceTimer = null;
+let activeSuggestion = -1;
+
+const input       = $("location-input");
+const suggestBox  = $("suggestions");
+const weatherBtn  = $("weather-btn");
+
+async function fetchSuggestions(query) {
+  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=6&addressdetails=1`;
+  const res  = await fetch(url, { headers: { "Accept-Language": "en" } });
+  return await res.json();
+}
+
+function renderSuggestions(results) {
+  suggestBox.innerHTML = "";
+  activeSuggestion = -1;
+
+  if (!results.length) {
+    suggestBox.style.display = "none";
+    return;
+  }
+
+  results.forEach((r, i) => {
+    const addr = r.address || {};
+    const main = r.name || addr.city || addr.town || addr.village || r.display_name.split(",")[0];
+    const sub  = r.display_name;
+
+    const div = document.createElement("div");
+    div.className = "suggestion";
+    div.innerHTML = `<div class="main">${main}</div><div class="sub">${sub}</div>`;
+    div.addEventListener("click", () => selectResult(r));
+    suggestBox.appendChild(div);
+  });
+
+  suggestBox.style.display = "block";
+}
+
+function selectResult(r) {
+  selectedLat   = parseFloat(r.lat);
+  selectedLon   = parseFloat(r.lon);
+  selectedLabel = r.display_name.split(",").slice(0, 3).join(",").trim();
+
+  input.value            = selectedLabel;
+  $("lat-display").value = selectedLat.toFixed(4);
+  $("lon-display").value = selectedLon.toFixed(4);
+  suggestBox.style.display = "none";
+  weatherBtn.disabled = false;
+}
+
+input.addEventListener("input", () => {
+  clearTimeout(debounceTimer);
+  selectedLat = selectedLon = null;
+  weatherBtn.disabled = true;
+  const q = input.value.trim();
+  if (q.length < 3) { suggestBox.style.display = "none"; return; }
+
+  debounceTimer = setTimeout(async () => {
+    try {
+      const results = await fetchSuggestions(q);
+      renderSuggestions(results);
+    } catch(e) {
+      suggestBox.style.display = "none";
+    }
+  }, 300);
+});
+
+// Keyboard nav
+input.addEventListener("keydown", e => {
+  const items = suggestBox.querySelectorAll(".suggestion");
+  if (!items.length) return;
+  if (e.key === "ArrowDown") {
+    activeSuggestion = Math.min(activeSuggestion + 1, items.length - 1);
+  } else if (e.key === "ArrowUp") {
+    activeSuggestion = Math.max(activeSuggestion - 1, 0);
+  } else if (e.key === "Enter" && activeSuggestion >= 0) {
+    items[activeSuggestion].click();
+    e.preventDefault();
+    return;
+  } else { return; }
+  items.forEach((el, i) => el.classList.toggle("active", i === activeSuggestion));
+  e.preventDefault();
+});
+
+document.addEventListener("click", e => {
+  if (!e.target.closest(".autocomplete-wrapper")) suggestBox.style.display = "none";
+});
+
+
+// ── GitHub Actions trigger ────────────────────────────────────────────────────
+async function triggerWorkflow(workflow, inputs) {
+  const token = localStorage.getItem("gh_token");
+  const repo  = localStorage.getItem("gh_repo");
+
+  if (!token || !repo) {
+    throw new Error("Set your GitHub token and repo in Settings first.");
+  }
+
+  const res = await fetch(
+    `https://api.github.com/repos/${repo}/actions/workflows/${workflow}/dispatches`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ ref: "main", inputs }),
+    }
+  );
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `HTTP ${res.status}`);
+  }
+}
+
+function showStatus(id, msg, type = "") {
+  const el = $(id);
+  el.textContent = msg;
+  el.className   = `status ${type}`;
+}
+
+$("weather-btn").addEventListener("click", async () => {
+  if (!selectedLat) return;
+  $("weather-btn").disabled = true;
+  showStatus("weather-status", "Triggering…");
+  try {
+    await triggerWorkflow("weather_plot.yml", {
+      label: selectedLabel,
+      lat:   String(selectedLat),
+      lon:   String(selectedLon),
+    });
+    showStatus("weather-status",
+      "✓ Workflow started! Check the Actions tab — plot will be committed to results/ in ~30s.", "ok");
+  } catch(e) {
+    showStatus("weather-status", `✗ ${e.message}`, "error");
+  } finally {
+    $("weather-btn").disabled = false;
+  }
+});
+
+$("stock-btn").addEventListener("click", async () => {
+  const symbols = $("ticker-input").value.trim();
+  if (!symbols) return;
+  $("stock-btn").disabled = true;
+  showStatus("stock-status", "Triggering…");
+  try {
+    await triggerWorkflow("stock_plot.yml", { symbols });
+    showStatus("stock-status",
+      "✓ Workflow started! Plot will appear in results/ in ~30s.", "ok");
+  } catch(e) {
+    showStatus("stock-status", `✗ ${e.message}`, "error");
+  } finally {
+    $("stock-btn").disabled = false;
+  }
+});
+</script>
+</body>
+</html>
